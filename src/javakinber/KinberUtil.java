@@ -61,7 +61,15 @@ public class KinberUtil {
         }
     }
 */
-    
+
+    public static boolean isSameNetwork(InetAddress ip1, InetAddress ip2) {
+        byte[] ip1b = ip1.getAddress();
+        ip1b[3] = 0;
+        byte[] ip2b = ip2.getAddress();
+        ip2b[3] = 0;
+        return Arrays.equals(ip1b, ip2b);
+    }
+
     public static void log(char type, String realm, Object message, boolean newLine) {
         Date date = new Date();
         Format formatter = new SimpleDateFormat("HH:mm:ss ");

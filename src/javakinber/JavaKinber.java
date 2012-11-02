@@ -152,18 +152,26 @@ public class JavaKinber {
         return jkHistory;
     }
 
+    private boolean sendPacket(InetAddress addr, String message) {
+        byte[] buf = message.getBytes();
+        DatagramPacket packet = new DatagramPacket(buf, buf.length, addr, RECEIVE_PORT);
+        try {
+            txSocket.send(packet);
+        } catch (Exception e) {
+            System.out.println("sendPacket: Error sending packet: " + e);
+            return false;
+        }
+        return true;
+    }
+
     public synchronized void sendCall(InetAddress addr) {
         // no use sending messages to self
         if (addr.equals(me.getAddress())) {
             return;
         }
         String messageStr = HEADER_CALL + me.getNickName() + "|" + me.getIP() + "|0";
-        byte[] buf = messageStr.getBytes();
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, addr, RECEIVE_PORT);
         //KinberUtil.log('>', "CALL", KinberUtil.getIP(addr));
-        try {
-            txSocket.send(packet);
-        } catch (Exception e) { System.out.println("!!! sendCall: Error sending packet: " + e); }
+        sendPacket(addr, messageStr);
         KinberContact c = contactList.get(addr);
         if (c != null) {
             c.setCalled();
@@ -220,29 +228,15 @@ public class JavaKinber {
 
     public synchronized void sendAnswer(KinberContact contact) {
         String messageStr = HEADER_ANSWER + me.getNickName() + "|" + me.getIP() + "|0";
-        byte[] buf = messageStr.getBytes();
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, contact.getAddress(), RECEIVE_PORT);
         KinberUtil.log('>', "ANSWER", me.toStringV() + " -> " + contact.toStringV());
-        try {
-            txSocket.send(packet);
-        } catch (Exception e) {
-            System.out.println("!!! sendAnswer: Error sending packet: " + e);
-        }
+        sendPacket(contact.getAddress(), messageStr);
     }
 
     public boolean sendMessage(KinberContact contact, String message) {
         String messageStr = HEADER_MESSAGE + me.getNickName() + "|" + message.replaceAll("\n", "\r\n");
-        byte[] buf = messageStr.getBytes();
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, contact.getAddress(), RECEIVE_PORT);
         jkHistory.log(contact.toString(), new KinberHistoryItem(me.getNickName(), KinberHistory.MESSAGE_SENT, new Date(), message));
         KinberUtil.log('>', "MESSAGE", contact.toStringV());
-        try {
-            txSocket.send(packet);
-        } catch (Exception e) {
-            System.out.println("sendMessage: Error sending packet: " + e);
-            return false;
-        }
-        return true;
+        return sendPacket(contact.getAddress(), messageStr);
     }
 
     public static boolean sendActivate() {
@@ -310,6 +304,20 @@ public class JavaKinber {
         }
     }
 
+    private InetAddress getPreferredAddress() {
+        InetAddress addr = null;
+        for (int i = 0; i < addresses.size(); i++) {
+            addr = addresses.get(i);
+            if (KinberUtil.isSameNetwork(addr, destNetwork)) {
+                return addr;
+            }
+        }
+        if (!addresses.isEmpty()) {
+            addr = addresses.get(0);
+        }
+        return addr;
+    }
+
     public void refreshAddresses(boolean forceUpdate) {
         KinberUtil.log('-', "NETWRK", "Refreshing IP addresses");
         addresses = getMyInetAddresses();
@@ -323,7 +331,7 @@ public class JavaKinber {
         InetAddress curAddr = me.getAddress();
         if (curAddr == null || !addresses.contains(curAddr)) {
             // set a new one
-            InetAddress newAddr = addresses.get(0);
+            InetAddress newAddr = getPreferredAddress();
             setAddress(newAddr);
         } else if (forceUpdate) {
             refresh(true);
